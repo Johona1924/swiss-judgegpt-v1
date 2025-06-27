@@ -102,9 +102,13 @@ class _AzureOpenAISettings(BaseSettings):
     )
     
     model: str
+    model_2: str
     key: Optional[str] = None
+    key_2: Optional[str] = None
     resource: Optional[str] = None
+    resource_2: Optional[str] = None
     endpoint: Optional[str] = None
+    endpoint_2: Optional[str] = None
     temperature: float = 0
     top_p: float = 0
     max_tokens: int = 1000
@@ -120,6 +124,7 @@ class _AzureOpenAISettings(BaseSettings):
     frequency_penalty: Optional[confloat(ge=-2.0, le=2.0)] = 0.0
     system_message: str = "You are an AI assistant that helps people find information."
     preview_api_version: str = MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
+    preview_api_version_2: str = MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
     embedding_endpoint: Optional[str] = None
     embedding_key: Optional[str] = None
     embedding_name: Optional[str] = None
@@ -128,6 +133,18 @@ class _AzureOpenAISettings(BaseSettings):
     function_call_azure_functions_tools_base_url: Optional[str] = None
     function_call_azure_functions_tool_key: Optional[str] = None
     function_call_azure_functions_tool_base_url: Optional[str] = None
+    model_2_list: List[str] = Field(
+        default_factory=list,  # Default to an empty list
+        validation_alias="AZURE_OPENAI_MODEL_2_LIST",
+        description="Comma-separated list of user IDs for model 2"
+    )
+
+    @field_validator("model_2_list", mode="before")
+    @classmethod
+    def parse_model_2_list(cls, value: str) -> List[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",")]
+        return value
     
     @field_validator('tools', mode='before')
     @classmethod

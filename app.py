@@ -117,11 +117,21 @@ azure_openai_available_tools = []
 # Initialize Azure OpenAI Client
 async def init_openai_client():
     azure_openai_client = None
+    azure_openai_client_2 = None
     
     try:
         # API version check
         if (
             app_settings.azure_openai.preview_api_version
+            < MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
+        ):
+            raise ValueError(
+                f"The minimum supported Azure OpenAI preview API version is '{MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION}'"
+            )
+        
+        # API version check 2
+        if (
+            app_settings.azure_openai.preview_api_version_2
             < MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
         ):
             raise ValueError(
@@ -143,6 +153,21 @@ async def init_openai_client():
             else f"https://{app_settings.azure_openai.resource}.openai.azure.com/"
         )
 
+        # Endpoint 2
+        if (
+            not app_settings.azure_openai.endpoint_2 and
+            not app_settings.azure_openai.resource_2
+        ):
+            raise ValueError(
+                "AZURE_OPENAI_ENDPOINT_2 or AZURE_OPENAI_RESOURCE_2 is required"
+            )
+
+        endpoint_2 = (
+            app_settings.azure_openai.endpoint_2
+            if app_settings.azure_openai.endpoint_2
+            else f"https://{app_settings.azure_openai.resource_2}.openai.azure.com/"
+        )
+
         # Authentication
         aoai_api_key = app_settings.azure_openai.key
         ad_token_provider = None
@@ -154,10 +179,26 @@ async def init_openai_client():
                     "https://cognitiveservices.azure.com/.default"
                 )
 
+        # Authentication 2
+        aoai_api_key_2 = app_settings.azure_openai.key_2
+        ad_token_provider_2 = None
+        if not aoai_api_key:
+            logging.debug("No AZURE_OPENAI_KEY found, using Azure Entra ID auth")
+            async with DefaultAzureCredential() as credential:
+                ad_token_provider_2 = get_bearer_token_provider(
+                    credential,
+                    "https://cognitiveservices.azure.com/.default"
+                )
+
         # Deployment
         deployment = app_settings.azure_openai.model
         if not deployment:
             raise ValueError("AZURE_OPENAI_MODEL is required")
+        
+        # Deployment 2
+        deployment_2 = app_settings.azure_openai.model_2
+        if not deployment_2:
+            raise ValueError("AZURE_OPENAI_MODEL_2 is required")
 
         # Default Headers
         default_headers = {"x-ms-useragent": USER_AGENT}
@@ -184,7 +225,15 @@ async def init_openai_client():
             azure_endpoint=endpoint,
         )
 
-        return azure_openai_client
+        azure_openai_client_2 = AsyncAzureOpenAI(
+            api_version=app_settings.azure_openai.preview_api_version_2,
+            api_key=aoai_api_key_2,
+            azure_ad_token_provider=ad_token_provider_2,
+            default_headers=default_headers,
+            azure_endpoint=endpoint_2,
+        )
+
+        return [azure_openai_client,azure_openai_client_2]
     except Exception as e:
         logging.exception("Exception in Azure OpenAI initialization", e)
         azure_openai_client = None
@@ -428,11 +477,26 @@ async def send_chat_request(request_body, request_headers):
     request_body['messages'] = filtered_messages
     model_args = prepare_model_args(request_body, request_headers)
 
+    #User_id based routing to different AzureOpenAI clients
+    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    user_id = authenticated_user["user_principal_id"]
+    logging.debug(f"----- AzureOpenAI Routing ------\n\n user_id = user_principal_id = {user_id} \n\n")
+
     try:
-        azure_openai_client = await init_openai_client()
-        raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
-        response = raw_response.parse()
-        apim_request_id = raw_response.headers.get("apim-request-id") 
+        model_2_user_ids = app_settings.azure_openai.model_2_list
+
+        if user_id in model_2_user_ids:
+            azure_openai_clients = await init_openai_client()
+            azure_openai_client = azure_openai_clients[1]
+            raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
+            response = raw_response.parse()
+            apim_request_id = raw_response.headers.get("apim-request-id")
+        else:
+            azure_openai_clients = await init_openai_client()
+            azure_openai_client = azure_openai_clients[0]
+            raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
+            response = raw_response.parse()
+            apim_request_id = raw_response.headers.get("apim-request-id") 
     except Exception as e:
         logging.exception("Exception in send_chat_request")
         raise e
@@ -1048,12 +1112,28 @@ async def generate_title(conversation_messages) -> str:
     messages.append({"role": "user", "content": title_prompt})
 
     try:
-        azure_openai_client = await init_openai_client()
-        response = await azure_openai_client.chat.completions.create(
-            model=app_settings.azure_openai.model, messages=messages, temperature=1, max_tokens=64
-        )
-
-        title = response.choices[0].message.content
+        azure_openai_clients = await init_openai_client()
+        if isinstance(azure_openai_clients,list):
+            if len(azure_openai_clients) > 0:
+                #For simplicity, the first model is always used for title generation
+                azure_openai_client = azure_openai_clients[0] 
+                response = await azure_openai_client.chat.completions.create(
+                    model=app_settings.azure_openai.model, messages=messages, temperature=1, max_tokens=64
+                )
+                title = response.choices[0].message.content
+            else:
+                logging.debug("init_openai_client() returns empty list")
+                return messages[-2]["content"]
+        else:
+            if isinstance(azure_openai_clients,AsyncAzureOpenAI):
+                azure_openai_client = azure_openai_clients
+                response = await azure_openai_client.chat.completions.create(
+                    model=app_settings.azure_openai.model, messages=messages, temperature=1, max_tokens=64
+                )
+                title = response.choices[0].message.content
+            else:
+                logging.debug("init_openai_client() returns neither list nor single instance of AsyncAzureOpenAI")
+                return messages[-2]["content"]
         return title
     except Exception as e:
         logging.exception("Exception while generating title", e)
