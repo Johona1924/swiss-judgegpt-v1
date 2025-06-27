@@ -102,7 +102,7 @@ class _AzureOpenAISettings(BaseSettings):
     )
     
     model: str
-    alt_model: str
+    alt_model: Optional[str] = None
     key: Optional[str] = None
     key_2: Optional[str] = None
     resource: Optional[str] = None

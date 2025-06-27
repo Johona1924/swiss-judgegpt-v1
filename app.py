@@ -120,6 +120,8 @@ async def init_openai_client():
     azure_openai_client_2 = None
     
     try:
+        #Initialize default OpenAI client
+
         # API version check
         if (
             app_settings.azure_openai.preview_api_version
@@ -129,15 +131,6 @@ async def init_openai_client():
                 f"The minimum supported Azure OpenAI preview API version is '{MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION}'"
             )
         
-        # API version check 2
-        if (
-            app_settings.azure_openai.preview_api_version_2
-            < MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
-        ):
-            raise ValueError(
-                f"The minimum supported Azure OpenAI preview API version is '{MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION}'"
-            )
-
         # Endpoint
         if (
             not app_settings.azure_openai.endpoint and
@@ -153,21 +146,6 @@ async def init_openai_client():
             else f"https://{app_settings.azure_openai.resource}.openai.azure.com/"
         )
 
-        # Endpoint 2
-        if (
-            not app_settings.azure_openai.endpoint_2 and
-            not app_settings.azure_openai.resource_2
-        ):
-            raise ValueError(
-                "AZURE_OPENAI_ENDPOINT_2 or AZURE_OPENAI_RESOURCE_2 is required"
-            )
-
-        endpoint_2 = (
-            app_settings.azure_openai.endpoint_2
-            if app_settings.azure_openai.endpoint_2
-            else f"https://{app_settings.azure_openai.resource_2}.openai.azure.com/"
-        )
-
         # Authentication
         aoai_api_key = app_settings.azure_openai.key
         ad_token_provider = None
@@ -179,27 +157,11 @@ async def init_openai_client():
                     "https://cognitiveservices.azure.com/.default"
                 )
 
-        # Authentication 2
-        aoai_api_key_2 = app_settings.azure_openai.key_2
-        ad_token_provider_2 = None
-        if not aoai_api_key:
-            logging.debug("No AZURE_OPENAI_KEY found, using Azure Entra ID auth")
-            async with DefaultAzureCredential() as credential:
-                ad_token_provider_2 = get_bearer_token_provider(
-                    credential,
-                    "https://cognitiveservices.azure.com/.default"
-                )
-
         # Deployment
         deployment = app_settings.azure_openai.model
         if not deployment:
             raise ValueError("AZURE_OPENAI_MODEL is required")
         
-        # Deployment 2
-        deployment_2 = app_settings.azure_openai.alt_model
-        if not deployment_2:
-            raise ValueError("AZURE_OPENAI_ALT_MODEL is required")
-
         # Default Headers
         default_headers = {"x-ms-useragent": USER_AGENT}
 
@@ -225,15 +187,64 @@ async def init_openai_client():
             azure_endpoint=endpoint,
         )
 
-        azure_openai_client_2 = AsyncAzureOpenAI(
-            api_version=app_settings.azure_openai.preview_api_version_2,
-            api_key=aoai_api_key_2,
-            azure_ad_token_provider=ad_token_provider_2,
-            default_headers=default_headers,
-            azure_endpoint=endpoint_2,
-        )
+        #if second model is provided, set up another openai client
+        if app_settings.azure_openai.alt_model:
 
-        return [azure_openai_client,azure_openai_client_2]
+            logging.debug(f"AZURE_OPENAI_ALT_MODEL is not None --> Initializing two AzureOpenAI models")
+        
+            # API version check 2
+            if (
+                app_settings.azure_openai.preview_api_version_2
+                < MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
+            ):
+                raise ValueError(
+                    f"The minimum supported Azure OpenAI preview API version is '{MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION}'"
+                )
+
+            # Endpoint 2
+            if (
+                not app_settings.azure_openai.endpoint_2 and
+                not app_settings.azure_openai.resource_2
+            ):
+                raise ValueError(
+                    "AZURE_OPENAI_ENDPOINT_2 or AZURE_OPENAI_RESOURCE_2 is required"
+                )
+
+            endpoint_2 = (
+                app_settings.azure_openai.endpoint_2
+                if app_settings.azure_openai.endpoint_2
+                else f"https://{app_settings.azure_openai.resource_2}.openai.azure.com/"
+            )
+
+            # Authentication 2
+            aoai_api_key_2 = app_settings.azure_openai.key_2
+            ad_token_provider_2 = None
+            if not aoai_api_key:
+                logging.debug("No AZURE_OPENAI_KEY_2 found, using Azure Entra ID auth")
+                async with DefaultAzureCredential() as credential:
+                    ad_token_provider_2 = get_bearer_token_provider(
+                        credential,
+                        "https://cognitiveservices.azure.com/.default"
+                    )
+            
+            # Deployment 2
+            deployment_2 = app_settings.azure_openai.alt_model
+            if not deployment_2:
+                raise ValueError("AZURE_OPENAI_ALT_MODEL is required")
+
+            azure_openai_client_2 = AsyncAzureOpenAI(
+                api_version=app_settings.azure_openai.preview_api_version_2,
+                api_key=aoai_api_key_2,
+                azure_ad_token_provider=ad_token_provider_2,
+                default_headers=default_headers,
+                azure_endpoint=endpoint_2,
+            )
+
+            return [azure_openai_client,azure_openai_client_2]
+        
+        else:
+            return azure_openai_client
+    
     except Exception as e:
         logging.exception("Exception in Azure OpenAI initialization", e)
         azure_openai_client = None
