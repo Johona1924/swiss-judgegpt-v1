@@ -196,9 +196,9 @@ async def init_openai_client():
             raise ValueError("AZURE_OPENAI_MODEL is required")
         
         # Deployment 2
-        deployment_2 = app_settings.azure_openai.model_2
+        deployment_2 = app_settings.azure_openai.alt_model
         if not deployment_2:
-            raise ValueError("AZURE_OPENAI_MODEL_2 is required")
+            raise ValueError("AZURE_OPENAI_ALT_MODEL is required")
 
         # Default Headers
         default_headers = {"x-ms-useragent": USER_AGENT}
@@ -483,20 +483,22 @@ async def send_chat_request(request_body, request_headers):
     logging.debug(f"----- AzureOpenAI Routing ------\n\n user_id = user_principal_id = {user_id} \n\n")
 
     try:
-        model_2_user_ids = app_settings.azure_openai.model_2_list
+        model_2_user_ids = app_settings.azure_openai.alt_model_user_ids
 
-        if user_id in model_2_user_ids:
+        if model_2_user_ids and user_id in model_2_user_ids:
             azure_openai_clients = await init_openai_client()
             azure_openai_client = azure_openai_clients[1]
             raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
             response = raw_response.parse()
             apim_request_id = raw_response.headers.get("apim-request-id")
+            logging.debug(f"\n\n---------------------- UserId is in ALT_MODEL_USER_IDS \n\n Using deployment {app_settings.azure_openai.alt_model}  \n\n----------------\n")
         else:
             azure_openai_clients = await init_openai_client()
             azure_openai_client = azure_openai_clients[0]
             raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
             response = raw_response.parse()
             apim_request_id = raw_response.headers.get("apim-request-id") 
+            logging.debug(f"\n\n---------------------- UserId is NOT in ALT_MODEL_USER_IDS \n\n Using deployment {app_settings.azure_openai.model}  \n\n----------------\n")
     except Exception as e:
         logging.exception("Exception in send_chat_request")
         raise e

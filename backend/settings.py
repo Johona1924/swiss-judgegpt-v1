@@ -102,7 +102,7 @@ class _AzureOpenAISettings(BaseSettings):
     )
     
     model: str
-    model_2: str
+    alt_model: str
     key: Optional[str] = None
     key_2: Optional[str] = None
     resource: Optional[str] = None
@@ -133,18 +133,29 @@ class _AzureOpenAISettings(BaseSettings):
     function_call_azure_functions_tools_base_url: Optional[str] = None
     function_call_azure_functions_tool_key: Optional[str] = None
     function_call_azure_functions_tool_base_url: Optional[str] = None
-    model_2_list: List[str] = Field(
-        default_factory=list,  # Default to an empty list
-        validation_alias="AZURE_OPENAI_MODEL_2_LIST",
-        description="Comma-separated list of user IDs for model 2"
-    )
+    alt_model_user_ids: Optional[List[str]] = None
 
-    @field_validator("model_2_list", mode="before")
+    @field_validator("alt_model_user_ids", mode="before")
     @classmethod
-    def parse_model_2_list(cls, value: str) -> List[str]:
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",")]
-        return value
+    def parse_alt_model_user_ids(cls, value: str) -> List[str]:
+        try:
+            if isinstance(value,str):
+                if value:
+                    logging.debug(f"Retrieved ALT_MODEL_USER_IDS is non-empty string")
+                    return [item.strip() for item in value.split(",")]
+                else:
+                    return []
+            elif isinstance(value,list):
+                if value:
+                    logging.debug(f"retrieved ALT_MODEL_USER_IDS is non-empty list")
+                    return [str(item) for item in value]
+                else:
+                    return []
+            return []
+        except Exception as e:
+                logging.warning(f"An unexpected exception occurred while parsing the ALT_MODEL_USER_IDS - {str(e)}")
+
+    
     
     @field_validator('tools', mode='before')
     @classmethod
