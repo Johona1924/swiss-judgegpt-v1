@@ -491,25 +491,33 @@ async def send_chat_request(request_body, request_headers):
     #User_id based routing to different AzureOpenAI clients
     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
-    logging.debug(f"----- AzureOpenAI Routing ------\n\n user_id = user_principal_id = {user_id} \n\n")
+    logging.debug(f"\n----- AzureOpenAI Routing ------\n\n user_id = user_principal_id = {user_id} \n\n")
 
     try:
-        model_2_user_ids = app_settings.azure_openai.alt_model_user_ids
-
-        if model_2_user_ids and user_id in model_2_user_ids:
-            azure_openai_clients = await init_openai_client()
-            azure_openai_client = azure_openai_clients[1]
+        azure_openai_clients = await init_openai_client()
+        if isinstance(azure_openai_clients,list):
+            if user_id in app_settings.azure_openai.alt_model_user_ids:
+                azure_openai_client = azure_openai_clients[1]
+                raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
+                response = raw_response.parse()
+                apim_request_id = raw_response.headers.get("apim-request-id")
+                logging.debug(f"\n----------------------\n\nUserId is in ALT_MODEL_USER_IDS\nUsing deployment {app_settings.azure_openai.alt_model}\n\n----------------")
+            else:
+                azure_openai_client = azure_openai_clients[0]
+                raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
+                response = raw_response.parse()
+                apim_request_id = raw_response.headers.get("apim-request-id") 
+                logging.debug(f"\n----------------------\n\nUserId is NOT in ALT_MODEL_USER_IDS\nUsing deployment {app_settings.azure_openai.model}\n\n----------------")
+        elif isinstance(azure_openai_clients,AsyncAzureOpenAI):
+            azure_openai_client = azure_openai_clients
             raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
             response = raw_response.parse()
             apim_request_id = raw_response.headers.get("apim-request-id")
-            logging.debug(f"\n\n---------------------- UserId is in ALT_MODEL_USER_IDS \n\n Using deployment {app_settings.azure_openai.alt_model}  \n\n----------------\n")
+            logging.debug(f"\n----------------------\n\nNo ALT_MODEL provided\nUsing deployment {app_settings.azure_openai.model}\n\n----------------")
         else:
-            azure_openai_clients = await init_openai_client()
-            azure_openai_client = azure_openai_clients[0]
-            raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
-            response = raw_response.parse()
-            apim_request_id = raw_response.headers.get("apim-request-id") 
-            logging.debug(f"\n\n---------------------- UserId is NOT in ALT_MODEL_USER_IDS \n\n Using deployment {app_settings.azure_openai.model}  \n\n----------------\n")
+            logging.error(f"Unexpected return from init_openai_client")
+            raise ValueError("Invalid Azure OpenAI client configuration in init_openai_client")
+
     except Exception as e:
         logging.exception("Exception in send_chat_request")
         raise e
@@ -1126,27 +1134,23 @@ async def generate_title(conversation_messages) -> str:
 
     try:
         azure_openai_clients = await init_openai_client()
+
         if isinstance(azure_openai_clients,list):
-            if len(azure_openai_clients) > 0:
-                #For simplicity, the first model is always used for title generation
-                azure_openai_client = azure_openai_clients[0] 
-                response = await azure_openai_client.chat.completions.create(
-                    model=app_settings.azure_openai.model, messages=messages, temperature=1, max_tokens=64
-                )
-                title = response.choices[0].message.content
-            else:
-                logging.debug("init_openai_client() returns empty list")
-                return messages[-2]["content"]
+            #For simplicity, the first model is always used for title generation
+            azure_openai_client = azure_openai_clients[0] 
+            response = await azure_openai_client.chat.completions.create(
+                model=app_settings.azure_openai.model, messages=messages, temperature=1, max_tokens=64
+            )
+            title = response.choices[0].message.content
+        elif isinstance(azure_openai_clients,AsyncAzureOpenAI):
+            azure_openai_client = azure_openai_clients
+            response = await azure_openai_client.chat.completions.create(
+                model=app_settings.azure_openai.model, messages=messages, temperature=1, max_tokens=64
+            )
+            title = response.choices[0].message.content
         else:
-            if isinstance(azure_openai_clients,AsyncAzureOpenAI):
-                azure_openai_client = azure_openai_clients
-                response = await azure_openai_client.chat.completions.create(
-                    model=app_settings.azure_openai.model, messages=messages, temperature=1, max_tokens=64
-                )
-                title = response.choices[0].message.content
-            else:
-                logging.debug("init_openai_client() returns neither list nor single instance of AsyncAzureOpenAI")
-                return messages[-2]["content"]
+            logging.warning("init_openai_client() returns neither list nor single instance of AsyncAzureOpenAI")
+            raise ValueError("Invalid Azure OpenAI client configuration")
         return title
     except Exception as e:
         logging.exception("Exception while generating title", e)

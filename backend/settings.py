@@ -133,7 +133,7 @@ class _AzureOpenAISettings(BaseSettings):
     function_call_azure_functions_tools_base_url: Optional[str] = None
     function_call_azure_functions_tool_key: Optional[str] = None
     function_call_azure_functions_tool_base_url: Optional[str] = None
-    alt_model_user_ids: Optional[List[str]] = None
+    alt_model_user_ids: Optional[List[str]] = Field(default_factory=list)
 
     @field_validator("alt_model_user_ids", mode="before")
     @classmethod
