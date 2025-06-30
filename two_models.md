@@ -1,6 +1,4 @@
 # Using Two Azure OpenAI Models in JudgeGPT
-
-This guide explains how to configure and use two Azure OpenAI models in JudgeGPT. The application supports conditional routing between two models based on user IDs.
 ---
 
 ## **Overview**
