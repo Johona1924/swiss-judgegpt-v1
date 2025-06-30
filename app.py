@@ -190,7 +190,13 @@ async def init_openai_client():
         #if second model is provided, set up another openai client
         if app_settings.azure_openai.alt_model:
 
-            logging.debug(f"AZURE_OPENAI_ALT_MODEL is not None --> Initializing two AzureOpenAI models")
+            if not isinstance(app_settings.azure_openai.alt_model_user_ids,list):
+                logging.error(f"AZURE_OPENAI_ALT_MODEL_USER_IDS not correctly parsed as list. Parsing yielded type {type(app_settings.azure_openai.alt_model_user_ids)}")
+                raise ValueError("AZURE_OPENAI_ALT_MODEL_USER_IDS not parsed as list")
+
+            logging.debug(f"\n----------\nAZURE_OPENAI_ALT_MODEL is not None\nInitializing two AzureOpenAI models")
+            logging.debug(f"Number of ALT_MODEL_USER_IDS : {len(app_settings.azure_openai.alt_model_user_ids)}")
+            logging.debug(f"First 10 ALT_MODEL_USER_IDS : {app_settings.azure_openai.alt_model_user_ids[:10]}\n----------\n")
         
             # API version check 2
             if (
@@ -493,7 +499,7 @@ async def send_chat_request(request_body, request_headers):
     #User_id based routing to different AzureOpenAI clients
     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
-    logging.debug(f"\n----- AzureOpenAI Routing ------\n\n user_id = user_principal_id = {user_id} \n\n")
+    logging.debug(f"\n----- AzureOpenAI Routing ------\nuser_id = user_principal_id = {user_id}\n----------")
 
     try:
         azure_openai_clients = await init_openai_client()
