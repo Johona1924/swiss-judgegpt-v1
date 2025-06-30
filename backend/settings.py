@@ -16,7 +16,7 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_snake
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Any
 from typing_extensions import Self
 from quart import Request
 from backend.utils import parse_multi_columns, generateFilterString
@@ -137,25 +137,32 @@ class _AzureOpenAISettings(BaseSettings):
 
     @field_validator("alt_model_user_ids", mode="before")
     @classmethod
-    def parse_alt_model_user_ids(cls, value: str) -> List[str]:
+    def parse_alt_model_user_ids(cls, value: Any) -> List[str]:
         try:
-            if isinstance(value,str):
-                if value:
-                    logging.debug(f"Retrieved ALT_MODEL_USER_IDS is non-empty string")
-                    return [item.strip() for item in value.split(",")]
-                else:
+            if isinstance(value, str):
+                value = value.strip()
+                if not value:
                     return []
-            elif isinstance(value,list):
-                if value:
-                    logging.debug(f"retrieved ALT_MODEL_USER_IDS is non-empty list")
-                    return [str(item) for item in value]
-                else:
-                    return []
+                
+                # Try to parse as JSON if it looks like a JSON array
+                if value.startswith("[") and value.endswith("]"):
+                    try:
+                        parsed = json.loads(value)
+                        if isinstance(parsed, list):
+                            return [str(item).strip() for item in parsed]
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                
+                # Fall back to comma splitting
+                return [item.strip() for item in value.split(",")]
+            elif isinstance(value, list):
+                return [str(item).strip() for item in value if item]
+            
             return []
         except Exception as e:
-                logging.warning(f"An unexpected exception occurred while parsing the ALT_MODEL_USER_IDS - {str(e)}")
+            logging.warning(f"An unexpected exception occurred while parsing ALT_MODEL_USER_IDS - {str(e)}")
+            return []
 
-    
     
     @field_validator('tools', mode='before')
     @classmethod
