@@ -340,6 +340,8 @@ def prepare_model_args(request_body, request_headers):
         application_name = app_settings.ui.title
         user_security_context = get_msdefender_user_json(authenticated_user_details, request_headers, application_name )  # security component introduced here https://learn.microsoft.com/en-us/azure/defender-for-cloud/gain-end-user-context-ai
     
+    # NOTE for two-model deployment: prepare_model_args always selects the default model deployment (env variable AZURE_OPENAI_MODEL) as the deployment
+    # Only in the chat.completions.create step will the deployment be adapted depending on if AZURE_OPENAI_ALT_MODEL is set and the user_id is in the list of provided user_ids
 
     model_args = {
         "messages": messages,
@@ -497,23 +499,24 @@ async def send_chat_request(request_body, request_headers):
         azure_openai_clients = await init_openai_client()
         if isinstance(azure_openai_clients,list):
             if user_id in app_settings.azure_openai.alt_model_user_ids:
+                model_args["model"] = str(app_settings.azure_openai.alt_model).strip() #set model to alternative deployment
                 azure_openai_client = azure_openai_clients[1]
                 raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
                 response = raw_response.parse()
                 apim_request_id = raw_response.headers.get("apim-request-id")
-                logging.debug(f"\n----------------------\n\nUserId is in ALT_MODEL_USER_IDS\nUsing deployment {app_settings.azure_openai.alt_model}\n\n----------------")
+                logging.debug(f"\n----------------------\n\nUserId is in ALT_MODEL_USER_IDS\nUsing deployment {model_args.get('model','ERROR')}\n\n----------------")
             else:
                 azure_openai_client = azure_openai_clients[0]
                 raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
                 response = raw_response.parse()
                 apim_request_id = raw_response.headers.get("apim-request-id") 
-                logging.debug(f"\n----------------------\n\nUserId is NOT in ALT_MODEL_USER_IDS\nUsing deployment {app_settings.azure_openai.model}\n\n----------------")
+                logging.debug(f"\n----------------------\n\nUserId is NOT in ALT_MODEL_USER_IDS\nUsing deployment {model_args.get('model','ERROR')}\n\n----------------")
         elif isinstance(azure_openai_clients,AsyncAzureOpenAI):
             azure_openai_client = azure_openai_clients
             raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
             response = raw_response.parse()
             apim_request_id = raw_response.headers.get("apim-request-id")
-            logging.debug(f"\n----------------------\n\nNo ALT_MODEL provided\nUsing deployment {app_settings.azure_openai.model}\n\n----------------")
+            logging.debug(f"\n----------------------\n\nNo ALT_MODEL provided\nUsing deployment {model_args.get('model','ERROR')}\n\n----------------")
         else:
             logging.error(f"Unexpected return from init_openai_client")
             raise ValueError("Invalid Azure OpenAI client configuration in init_openai_client")
