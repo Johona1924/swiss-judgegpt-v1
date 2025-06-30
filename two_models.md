@@ -32,7 +32,7 @@ AZURE_OPENAI_RESOURCE_2=<alt_model_resource_name>
 AZURE_OPENAI_ENDPOINT_2=https://<alt_model_resource_name>.openai.azure.com/
 
 # User Routing for Alternative Model
-AZURE_OPENAI_ALT_MODEL_USER_IDS=00000000-0000-0000-0000-000000000000,
+AZURE_OPENAI_ALT_MODEL_USER_IDS=00000000-0000-0000-0000-000000000000,auth0|6855852b951d58e1da2c2179
 ```
 
 - **Primary Model**:
@@ -48,14 +48,14 @@ AZURE_OPENAI_ALT_MODEL_USER_IDS=00000000-0000-0000-0000-000000000000,
   - `AZURE_OPENAI_ENDPOINT_2`: Endpoint for the alternative model.
 
 - **User Routing**:
-  - `AZURE_OPENAI_ALT_MODEL_USER_IDS`: Comma-separated string of user IDs that should use the alternative model.
+  - `AZURE_OPENAI_ALT_MODEL_USER_IDS`: Comma-separated string of user IDs that should use the alternative model. Do NOT use double-quotes when setting the value in .env or in Azure App Service Environment Variables
 
 ### 2. **Single vs. Double Model Usage**
 - **Single Model**:
   - To use only the primary model, leave `AZURE_OPENAI_ALT_MODEL` empty in the [`.env`](.env) file.
 
 - **Double Model**:
-  - To enable both models, set `AZURE_OPENAI_ALT_MODEL` and its related variables (`AZURE_OPENAI_KEY_2`, `AZURE_OPENAI_RESOURCE_2`, `AZURE_OPENAI_ENDPOINT_2`) in the [`.env`](.env) file.
+  - To enable both models, set `AZURE_OPENAI_ALT_MODEL` and its related variables (`AZURE_OPENAI_KEY_2`, `AZURE_OPENAI_RESOURCE_2`, `AZURE_OPENAI_ENDPOINT_2`, `AZURE_OPENAI_ALT_MODEL_USER_IDS`) in the [`.env`](.env) file.
 
 ### 3. **User ID for Routing**
 - The backend uses the `user_principal_id` from the authenticated user's details to determine which model to route the request to.
