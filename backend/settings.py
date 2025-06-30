@@ -144,21 +144,10 @@ class _AzureOpenAISettings(BaseSettings):
                 if not value:
                     return []
                 
-                # Try to parse as JSON if it looks like a JSON array
-                if value.startswith("[") and value.endswith("]"):
-                    try:
-                        parsed = json.loads(value)
-                        if isinstance(parsed, list):
-                            return [str(item).strip() for item in parsed]
-                    except (json.JSONDecodeError, ValueError):
-                        pass
-                
-                # Fall back to comma splitting
-                return [item.strip() for item in value.split(",")]
-            elif isinstance(value, list):
-                return [str(item).strip() for item in value if item]
-            
-            return []
+                return [item.strip() for item in value.split(",") if item]
+            else:
+                logging.warning(f"AZURE_OPENAI_ALT_MODEL_USER_IDS not retrieved as string by App settings initialization. Returning empty list")
+                return []
         except Exception as e:
             logging.warning(f"An unexpected exception occurred while parsing ALT_MODEL_USER_IDS - {str(e)}")
             return []
